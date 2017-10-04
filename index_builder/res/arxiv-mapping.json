@@ -1,0 +1,88 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "index.query.default_field": "pages"
+  },
+  "mappings": {
+    "arxiv": {
+      "_all": {
+        "enabled": false
+      },
+      "properties": {
+        "arxiv-id": {
+          "type": "keyword"
+        },
+        "arxiv-url": {
+          "type": "keyword",
+          "doc_values": false
+        },
+        "title": {
+          "type": "string",
+          "fields": {
+            "english": {
+              "type": "string",
+              "analyzer": "english"
+            },
+            "raw": {
+              "index": "not_analyzed",
+              "type": "string"
+            }
+          }
+        },
+        "authors": {
+          "type": "string",
+          "fields": {
+            "raw": {
+              "index": "not_analyzed",
+              "type": "string"
+            }
+          }
+        },
+        "date-created": {
+          "type": "date",
+          "format": "strict_date"
+        },
+        "date-submitted": {
+          "type": "date",
+          "format": "strict_date"
+        },
+        "categories": {
+          "type": "string",
+          "index": "not_analyzed"
+        },
+        "subjects": {
+          "type": "string",
+          "index": "not_analyzed",
+          "doc_values": false
+        },
+        "topics": {
+          "type": "nested",
+          "properties": {
+            "topic": {
+              "type": "keyword"
+            },
+            "score": {
+              "type": "float"
+            },
+            "layer": {
+              "type": "integer"
+            }
+          }
+        },
+        "abstract": {
+          "type": "string",
+          "fields": {
+            "english": {
+              "type": "string",
+              "analyzer": "english"
+            }
+          }
+        },
+        "pages": {
+          "type": "string",
+          "analyzer": "english"
+        }
+      }
+    }
+  }
+}
