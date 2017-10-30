@@ -14,7 +14,6 @@ from typing import Callable, Dict, Any, Iterable, List, Generator, IO, T, Union,
 
 from elasticsearch import Elasticsearch, helpers
 
-
 logger = logging.getLogger('index-builder')
 logger.setLevel(logging.INFO)
 

@@ -5,6 +5,8 @@ import json
 import logging
 from collections import OrderedDict
 from typing import List, Tuple, Union, Dict, Any, Iterable, Callable
+import warnings
+warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
 
 import numpy
 from gensim.corpora import IndexedCorpus

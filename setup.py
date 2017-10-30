@@ -27,7 +27,10 @@ setup(
         'elasticsearch>=5.3.0,<6.0.0',
         'xmltodict>=0.10.0',
         'langdetect>=1.0.7',
+        'numpy>=1.7',
         'spacy>=1.8.0,<2.0',
         'gensim>=2.1.0,<3.0',
+        'requests>=2.12,<3.0',
+        'pdfminer.six>=20170419',
     ],
 )

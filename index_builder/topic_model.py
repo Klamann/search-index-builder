@@ -5,8 +5,11 @@ import logging
 import os
 import pickle
 import time
+import warnings
 from collections import Counter, defaultdict
 from typing import Dict, Any, List, Iterable, Tuple, Set
+
+warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
 
 import langdetect
 import spacy
