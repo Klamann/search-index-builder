@@ -120,9 +120,45 @@ There are a few optional parameters for this task:
 
 ### Elasticsearch Index Builder
 
-`es_index.py` creates and populates an arxiv index from the crawled metadata and the parsed full-text from the downloaded PDFs. The mapping is defined in `src/res/arxiv-mapping.json`.
+`es_index.py` creates and populates an arxiv index from the crawled metadata, the generated topic model and the parsed full-text from the downloaded PDFs. The mapping is defined in `src/res/arxiv-mapping.json`. Please edit the index settings in this file, e.g. if you want to increase the default number of shards or replicas.
 
-(...)
+    usage: es_index.py [-h] [-H HOST] [-P PORT] [-u USER] [-p PASS] [-i NAME]
+                       [-T NAME] [-n] [-o] [-m FILE] [-t FILE] [-c FILE]
+    
+    Create and populate an Elasticsearch index.
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -H HOST, --host HOST  the network host of the Elasticsearch node (default:
+                            localhost)
+      -P PORT, --port PORT  the tcp port Elasticsearch is listening on (default:
+                            9200)
+      -u USER, --http-user USER
+                            if http authentication is required, please specify the
+                            name here
+      -p PASS, --http-password PASS
+                            if http authentication is required, please specify the
+                            password here
+      -i NAME, --index-name NAME
+                            the name of the Elasticsearch index to use
+      -T NAME, --index-type NAME
+                            the type name of the Elasticsearch index to use
+      -n, --new-index       create a new index (otherwise we assume an index
+                            already exists)
+      -o, --overwrite-index
+                            overwrite an index of the same name, if it already
+                            exists (otherwise we abort)
+      -m FILE, --file-meta FILE
+                            path to the metadata file (see `arxiv_crawler.py` to
+                            get metadata). Can read bz2 and gzip compressed files.
+      -t FILE, --file-topics FILE
+                            path to the topic model file (see `topic_model.py` to
+                            build a topic model). Can read bz2 and gzip compressed
+                            files.
+      -c FILE, --file-content FILE
+                            path to the file containing the PDF texts (see
+                            `pdf_parser.py` to extract text from PDFs). Can read
+                            bz2 and gzip compressed files.
 
 ### Other Functions
 
