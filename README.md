@@ -5,9 +5,11 @@ This is a collection of scripts that should help you to build a topic model and 
 The main functions are:
 
 * get metadata from [arxiv.org](https://arxiv.org/)
-* pars pdfs and filter them by language
+* parse pdfs and filter them by language
 * create a topic model
 * build an elasticsearch index
+
+These functions and their purpose are described in detail in the thesis *[Towards Collaborative Session-based Semantic Search](http://nbn-resolving.de/urn:nbn:de:bsz:14-qucosa-229549)* by Sebastian Straub.
 
 ## Getting started
 
@@ -23,13 +25,13 @@ If you're on Windows, installation of spacy, gensim, numpy, scipy, etc. might fa
 
 In case you're still missing any dependencies on Linux or Mac OSX, please install `libxml2` and `libxslt1`, e.g. on Debian:
 
-    apt-get install libxml2-dev libxslt1-dev
+    apt install libxml2-dev libxslt1-dev
 
 ## Usage
 
-### arxiv-crawler
+### Arxiv Crawler
 
-`arxiv-crawler.py` is a script that retrieves metadata about submitted papers over arxiv's [OAI](https://arxiv.org/help/oa/index) interface. It also also allows you to download small sets of papers directly from the public arxiv servers. Please note that by the terms of usage of arxiv.org you are *not* allowed to download large sets of documents from their webservice. You may retrieve a dump containing all data from [Amazon AWS](https://arxiv.org/help/bulk_data) (see [instructions below](#getting-the-arxiv-dataset)).
+`arxiv_crawler.py` is a script that retrieves metadata about submitted papers over arxiv's [OAI](https://arxiv.org/help/oa/index) interface. It also also allows you to download small sets of papers directly from the public arxiv servers. Please note that by the terms of usage of arxiv.org you are *not* allowed to download large sets of documents from their webservice. You may retrieve a dump containing all data from [Amazon AWS](https://arxiv.org/help/bulk_data) (see [instructions below](#getting-the-arxiv-dataset)).
 
 To get usage instructions:
 
@@ -50,6 +52,26 @@ If you want to download a few PDFs (e.g. for test purposes), you may use the `pd
 
 this command takes a metadata file (see `meta` command) and downloads all PDFs that are referenced in this file. The PDFs will be stored in the `--output` folder. *Use with caution!*
 
+Full usage instructions:
+
+    usage: arxiv_crawler.py meta [-h] -o FILE [-s SET] [-f DATE] [-u DATE]
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -o FILE, --output FILE
+                            path to the file where the metadata will be stored.
+                            Use `.gz` or `.bz2` as file extension to enable
+                            compression
+      -s SET, --set SET     restrict downloaded data to documents from this set.
+                            List of available options:
+                            http://export.arxiv.org/oai2?verb=ListSets
+      -f DATE, --dateFrom DATE
+                            only retrieve documents from this date or later.
+                            Specify the date in ISO format, e.g. "2017-01-31"
+      -u DATE, --dateUntil DATE
+                            only retrieve documents until this date (inclusive).
+                            Specify the date in ISO format, e.g. "2017-01-31"
+
 ### PDF Parser
 
 `pdf_parser.py` extracts the text contents from PDFs using the [pdfminer](http://www.unixuser.org/~euske/python/pdfminer/) library and stores the plain text in a JSON file.
@@ -68,7 +90,45 @@ There are a few optional parameters for this task:
 * `-t s`: parse timeout in seconds for a single pdf. This should be reasonably low, because PDFs are a mess and pdfminer won't be able to parse some of them in a reasonable amount of time, which will eventually block all your CPU cores (default: 60 seconds)
 * `-w N`: the number of parallel worker threads to use for pdf parsing (default: 0, which means use all available cpu cores)
 
+Full usage instructions:
+
+    usage: pdf_parser.py [-h] -i FOLDER -o FOLDER [--tar] [-p N] [-t SECONDS]
+                         [-w N]
+    
+    Parse PDFs and store them as plaintext documents
+    
+    optional arguments:
+      -h, --help            show this help message and exit
+      -i FOLDER, --input FOLDER
+                            path to the input folder, where the PDFs are stored
+      -o FOLDER, --output FOLDER
+                            path to the output folder, where the parsed plain text
+                            and logfiles will be stored
+      --tar                 read PDFs from tar archives in the input folder
+      -p N, --pagelimit N   limit the number of pages to parse per pdf (default:
+                            unlimited)
+      -t SECONDS, --timeout SECONDS
+                            parse timeout in seconds for a single pdf (default: 60
+                            seconds)
+      -w N, --workers N     the number of parallel worker threads to use for pdf
+                            parsing (default: 0, which means use all available cpu
+                            cores)
+
 ### Topic Model Generator
+
+`topic_model.py` helps you to build a possibly hierarchical topic model and then to to assign topic labels to the documents in your collection.
+
+Before the topic model can be built, documents are normalized and tokenized with a little help from [spacy](https://spacy.io/), a highly efficient NLP library that allows not only to tokenize our documents, but also to lemmatize all of these terms in a reasonable amount of time.
+
+The topic model is built with the help of [gensim](https://radimrehurek.com/gensim/), another NLP library that implements a variety of topic modeling algorithms. We use LDA topic models (more specifically, the [ldamulticore](https://radimrehurek.com/gensim/models/ldamulticore.html) implementation, which allows parallel online learning with constant memory requirements) which we have extended so that we can build hierarchical topic models. For this purpose, we build several topic models that are arranged in a tree structure. For details, please refer to [the thesis](http://nbn-resolving.de/urn:nbn:de:bsz:14-qucosa-229549) (section 4.1.2.).
+
+To build a topic model from scratch, you need the metadata file from the arxiv crawler or the plaintext contents from the PDF parser, or both. You can build the model from the document's abstracts or from their entire contents. E.g. to build a topic model from the abstracts of all documents in your metadata file, use:
+
+    python topic_model.py --input-meta /path/to/meta.json.bz2 -o /output/folder/ --abstracts-only --layers "5,5" --vocab-size 10000
+
+This will read the metadata file from `/path/to/meta.json.bz2` and write the results to `/output/folder/`. Only the abstracts will be used for topic modeling, the size of the vocabulary is limited to the 10k most frequent terms. We will build a two-layer topic model, with 5 topics per layer (that is 5 topics on the first layer, and 5 topics each on all sub-layers, for a total of 5 + 5*5 = 30 topics).
+
+Full usage instructions:
 
     usage: topic_model.py [-h] [-p FILE] [-t FILE] [-m FILE] -o PATH [-a]
                           [-T MODEL] [-l LAYERS] [-c LIMITS] [-M N] [-f LANG]
@@ -94,8 +154,8 @@ There are a few optional parameters for this task:
       -a, --abstracts-only  build topic models based on a paper's abstract only
                             (do not use the entire document text)
       -T MODEL, --topic-model MODEL
-                            the topic model to use. Options: "hdp" (default),
-                            "lda")
+                            the topic model to use. Options: "lda" (default),
+                            "hdp")
       -l LAYERS, --layers LAYERS
                             how many nested topic layers are to be used? Example:
                             "10,7,4"
@@ -121,6 +181,16 @@ There are a few optional parameters for this task:
 ### Elasticsearch Index Builder
 
 `es_index.py` creates and populates an arxiv index from the crawled metadata, the generated topic model and the parsed full-text from the downloaded PDFs. The mapping is defined in `src/res/arxiv-mapping.json`. Please edit the index settings in this file, e.g. if you want to increase the default number of shards or replicas.
+
+The script can generate a complete index from scratch or update an existing index with just the specified data. To create a new index, use the `--new-index` flag. There are three parameters starting with `--file-*`; by providing a path to a valid file, either the metadata, topic model or the document contents will be updated. For a full run, please provide a path to all three files.
+
+Example:
+
+    python es_index.py --host "localhost" --port 9200 --new-index --index-name "my-index" --file-meta /path/to/meta.json.bz2
+
+This will create a new index named "my-index" on a local elasticsearch node and write the metadata from the specified file to this index. Add the other `--file-*` parameters to add the topic model and the pdf contents to the index.
+
+Full usage instructions:
 
     usage: es_index.py [-h] [-H HOST] [-P PORT] [-u USER] [-p PASS] [-i NAME]
                        [-T NAME] [-n] [-o] [-m FILE] [-t FILE] [-c FILE]
