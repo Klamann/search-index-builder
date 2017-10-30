@@ -1,6 +1,7 @@
 {
   "settings": {
     "number_of_shards": 1,
+    "number_of_replicas": 0,
     "index.query.default_field": "pages"
   },
   "mappings": {
@@ -17,24 +18,22 @@
           "doc_values": false
         },
         "title": {
-          "type": "string",
+          "type": "text",
           "fields": {
             "english": {
-              "type": "string",
+              "type": "text",
               "analyzer": "english"
             },
             "raw": {
-              "index": "not_analyzed",
-              "type": "string"
+              "type": "keyword"
             }
           }
         },
         "authors": {
-          "type": "string",
+          "type": "text",
           "fields": {
             "raw": {
-              "index": "not_analyzed",
-              "type": "string"
+              "type": "keyword"
             }
           }
         },
@@ -47,12 +46,10 @@
           "format": "strict_date"
         },
         "categories": {
-          "type": "string",
-          "index": "not_analyzed"
+          "type": "keyword"
         },
         "subjects": {
-          "type": "string",
-          "index": "not_analyzed",
+          "type": "keyword",
           "doc_values": false
         },
         "topics": {
@@ -70,16 +67,16 @@
           }
         },
         "abstract": {
-          "type": "string",
+          "type": "text",
           "fields": {
             "english": {
-              "type": "string",
+              "type": "text",
               "analyzer": "english"
             }
           }
         },
         "pages": {
-          "type": "string",
+          "type": "text",
           "analyzer": "english"
         }
       }
