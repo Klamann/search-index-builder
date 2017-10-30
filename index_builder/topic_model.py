@@ -656,8 +656,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-a', '--abstracts-only', action='store_true',
                         help="build topic models based on a paper's abstract only "
                              "(do not use the entire document text)")
-    parser.add_argument('-T', '--topic-model', metavar='MODEL', type=str, default="hdp",
-                        help='the topic model to use. Options: "hdp" (default), "lda")')
+    parser.add_argument('-T', '--topic-model', metavar='MODEL', type=str, default="lda",
+                        help='the topic model to use. Options: "lda" (default), "hdp")')
     parser.add_argument('-l', '--layers', metavar='LAYERS', type=str, default="10",
                         help='how many nested topic layers are to be used? Example: "10,7,4"')
     parser.add_argument('-c', '--limit-classification', metavar='LIMITS', type=str,

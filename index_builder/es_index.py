@@ -17,7 +17,7 @@ def main(es_host='localhost', es_port=9200, http_user=None, http_password=None,
          index_name='arxiv-index', index_type='arxiv', index_new=True, index_overwrite=False,
          file_meta: str = None, file_topics: str = None, file_content: str = None):
     """
-
+    Creates and populates an Elasticsearch index using the specified data sources.
     :param es_host: the network host of the Elasticsearch node (default: localhost)
     :param es_port: the tcp port Elasticsearch is listening on (default: 9200)
     :param http_user: if http authentication is required, please specify the name here

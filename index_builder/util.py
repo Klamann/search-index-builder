@@ -184,11 +184,6 @@ class ProcessKillingExecutor:
         :return: An iterator equivalent to: map(func, *iterables) but the calls may be evaluated out-of-order.
         """
 
-        # TODO this thing here evaluates my entire input generator. That sucks!
-        # need to do something with queues and executor.submit() or skip this whole executor entirely...
-        # https://docs.python.org/3/library/concurrent.futures.html
-        # issue: https://bugs.python.org/issue30323
-
         # approach:
         # create a fixed amount of threads, all threads share an input queue
         # the queue holds the function params and can be fairly short
@@ -231,7 +226,7 @@ class ProcessKillingExecutor:
             # there is the oh so slightest chance of a race condition here:
             # if the last thread calls notify just before we go into wait,
             # we have to wait for the next thread, which takes forever in a
-            # single-thread scenario
+            # single-thread scenario. Never happened so far, but still...
             if self.__worker_count_get() >= self.max_workers:
                 with self.cv:
                     self.cv.wait()
