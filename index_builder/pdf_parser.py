@@ -29,10 +29,39 @@ GB = 2**30
 
 
 class PdfParser:
+    """
+    The PdfParser extracts the text contents of PDF files using the pdfminer library and stores
+    their plain text representation in a JSON file.
+    It parses all PDFs in the input folder and writes the results to the specified output folder.
+    The output folder will contain the plaintext representation of all PDFs in a single JSON
+    file and several log files that contain progress information.
+    Because parsing of PDFs is rather slow (expect about 25 PDFs per minute per physical CPU core
+    on a modern desktop CPU), the PdfParser tracks progress and can therefore be interrupted at any
+    time and later continued without loss of data.
+    Parsing is executed in parallel using multiple processes.
+    """
 
     def __init__(self, input_folder: str, output_folder: str, unpack_tar=False,
                  worker_threads=0, status_interval=0.1, parse_timeout=None, pdf_page_limit=0):
+        """
+        Creates a new PdfParser instance
+        :param input_folder: path to the input folder, where the PDFs are stored
+        :param output_folder: path to the output folder, where the parsed plain text and logfiles
+               will be stored.
+        :param unpack_tar: when set to True, we expect pdfs to be packed in tar archives in the
+               input folder.
+        :param worker_threads: the number of parallel worker threads to use for pdf parsing
+               (default: 0, which means use all available cpu cores)
+        :param status_interval: print a status message every N parsed documents (when N > 1) or
+               every N*len(pdf) documents, when 0<N<1. If we don't know how many documents there are
+               (e.g. when pdfs are packed in tar archives), fall back to every 100 documents.
+        :param parse_timeout: parse timeout in seconds for a single pdf (default: 60 seconds)
+        :param pdf_page_limit: limit the number of pages to parse per pdf (default: unlimited.
+               Note that when parsing is interrupted due to timeouts, no intermediary results can
+               be retrieved!)
+        """
         super().__init__()
+        # parameters
         self.input_folder = input_folder
         self.output_folder = output_folder
         self.unpack_tar = unpack_tar
@@ -59,6 +88,14 @@ class PdfParser:
         self.entity_count = None
 
     def extract_pdf_texts(self):
+        """
+        Stream PDF files from the input directory through the PDF parser and write the
+        plaintext contents to a json file.
+        This operation runs truly parallel using multiple processes while keeping the memory
+        footprint reasonable by making heavy use of python's generators.
+        Also, all tasks are logged and interrupted operations can be resumed at any time.
+        All configuration is already stored in the PdfParser class.
+        """
         # create the output folder, if it does not yet exist
         os.makedirs(self.output_folder, exist_ok=True)
         # read logfiles and update data structures
@@ -74,6 +111,10 @@ class PdfParser:
         # and we can even parallelize all of this using all available cpu cores
 
     def read_logfiles(self):
+        """
+        Read the logfiles and parse their contents, so a previous task can be continued.
+        All data structures are stored as properties of this instance.
+        """
         self.set_success = util.parse_task_log(self.logfile_success)
         self.set_failure = util.parse_task_log(self.logfile_failure)
         self.set_timeout = util.parse_task_log(self.logfile_timeout)
@@ -87,7 +128,7 @@ class PdfParser:
         """
         get a generator of all PDFs in a folder
         set self.entity_count
-        :return: a generator containing all PDFs in the input folder (as bytes)
+        :return: a generator containing all PDFs in the input folder (as PdfFile objects)
         """
         files = [file for file in sorted(os.listdir(self.input_folder)) if file.endswith(".pdf")]
         self.entity_count = len(files)
@@ -99,13 +140,20 @@ class PdfParser:
                 yield PdfFile.from_file(os.path.join(self.input_folder, file))
 
     def pdfs_from_archives(self) -> Iterable['PdfFile']:
+        """
+        get a generator of all PDFs in all tar archives in a folder
+        :return: a generator containing all PDFs (as PdfFile objects)
+        """
         # list files
         archives = [file for file in sorted(os.listdir(self.input_folder)) if file.endswith(".tar")]
         archives_skipped = [f for f in archives if f in self.set_tarfile]
         archives_remaining = [f for f in archives if f not in self.set_tarfile]
 
         # log stats
-        # note: tar files have no index: to list their contents, they have to be read from start to end
+        # note: tar files have no index: to list their contents, we'd have to read them from start
+        # to end. Because this can take quite a while, we don't do this ahead of time.
+        # As an alternative we estimate our progress based on the size of the archives rather than
+        # having an exact count of documents.
         t0 = time()
         archive_size_total = sum(os.path.getsize(os.path.join(self.input_folder, file)) for file in archives_remaining)
         archive_size_processed = 0
@@ -114,10 +162,13 @@ class PdfParser:
         est_size_processed = 0
         if archives_skipped:
             size_skipped = sum(os.path.getsize(os.path.join(self.input_folder, file)) for file in archives_skipped)
-            logger.info("skipping {} archives (total size: {:.2f} GB) that are already done, continuing with {} archives (total size: {:.2f} GB)"
-                        .format(len(archives_skipped), size_skipped/GB, len(archives_remaining), archive_size_total/GB))
+            logger.info("skipping {} archives (total size: {:.2f} GB) that are already done, "
+                        "continuing with {} archives (total size: {:.2f} GB)"
+                        .format(len(archives_skipped), size_skipped/GB, len(archives_remaining),
+                                archive_size_total/GB))
         else:
-            logger.info("processing {} archives (total size: {:.2f} GB)".format(len(archives_remaining), archive_size_total/GB))
+            logger.info("processing {} archives (total size: {:.2f} GB)"
+                        .format(len(archives_remaining), archive_size_total/GB))
 
         # read files from archives
         for i, archive in enumerate(archives_remaining):
@@ -158,21 +209,11 @@ class PdfParser:
 
     def parse_pdfs(self, pdf_files: Iterable['PdfFile']) -> Iterable[Dict]:
         """
-        
-        :param pdf_files: 
-        :return: 
+        Creates a generator that yields parsed pdfs.
+        Makes use of the `ProcessKillingExecutor` to speed up parsing.
+        :param pdf_files: the PDF files to parse
+        :return: a generator of parsed PDFs (as dict, see `parse_pdf()` for details)
         """
-        """
-       Creates a generator that yields parsed pdfs.
-       Can make use of a thread pool to speed up parsing.
-       :param paths: the paths of the pdfs to parse
-       :param parallel: uses all available threads, if set to True. Order is not guaranteed when parallel=True.
-       :param status_interval: how often the status interval should be printed
-              either every n documents or for values < 1 every n percent of documents.
-              Default value 0.05 says print every 5% of all documents.
-       :return: a generator containing the parsed PDFs. The generator is backed by a parallel Pool, so make sure
-                to consume it fast or documents will pile up in memory.
-       """
         t0 = time()
         num_threads = self.worker_threads if self.worker_threads else None
         task_size = None    # need to fill in later, due to lazy evaluation
@@ -187,15 +228,15 @@ class PdfParser:
         else:
             logger.warning("The status interval was set to every {:.1} %, but we don't know "
                            "the total number of PDFs to parse. As a fallback, we'll print a "
-                           "status update every 100 files".format(self.status_interval / 100))
+                           "status update every 100 files".format(self.status_interval * 100))
 
         # initialize counters
         counter = 0
         failures = 0
         sum_pages = 0
 
-        logger.info('preparing to parse pdfs using {} thread{}'
-                    .format(num_threads or os.cpu_count(), "" if num_threads == 1 else "s"))
+        logger.info('preparing to parse pdfs using {} process{}'
+                    .format(num_threads or os.cpu_count(), "" if num_threads == 1 else "es"))
         try:
             pool = util.ProcessKillingExecutor(max_workers=num_threads)
 
@@ -215,14 +256,19 @@ class PdfParser:
                     sum_pages += len(result['pages'])
                     if counter % status_interval == 0:
                         delta = time() - t0
-                        stats = "{:.2f} pdfs per minute, {:.2f} pages per second".format((counter / delta) * 60, sum_pages / delta)
+                        stats = "{:.2f} pdfs per minute, {:.2f} pages per second".format(
+                            (counter / delta) * 60, sum_pages / delta
+                        )
                         if self.entity_count:
                             if not task_size:
                                 task_size = (self.entity_count - len(self.set_skip))
-                            logger.info("{} of {} pdfs ({:.2f} %) have been parsed in {:.1f} min ({}, est. remaining: {:.1f} min)"
-                                        .format(counter, task_size, counter * 100 / task_size, delta / 60, stats, (delta/60) * (task_size - counter) / counter))
+                            logger.info("{} of {} pdfs ({:.2f} %) have been parsed in {:.1f} min "
+                                        "({}, est. remaining: {:.1f} min)"
+                                        .format(counter, task_size, counter * 100 / task_size, delta / 60,
+                                                stats, (delta/60) * (task_size - counter) / counter))
                         else:
-                            logger.info("{} pdfs have been parsed in {:.1f} min ({})".format(counter, delta / 60, stats))
+                            logger.info("{} pdfs have been parsed in {:.1f} min ({})"
+                                        .format(counter, delta / 60, stats))
                     yield result
                     util.write_task_log(result['id'], self.set_success, self.logfile_success)
                 else:
@@ -231,11 +277,18 @@ class PdfParser:
                         util.write_task_log(result['id'], self.set_failure, self.logfile_failure)
         finally:
             time_all = time() - t0
-            logger.info("finished parsing of {} pdfs in {:.2f}s ({:.2f} pdfs per minute, {:.2f} pages per second)."
-                        " {} documents have been skipped due to parsing errors."
+            logger.info("finished parsing of {} pdfs in {:.2f}s ({:.2f} pdfs per minute, {:.2f} "
+                        "pages per second). {} documents have been skipped due to parsing errors."
                         .format(counter, time_all, (counter / time_all) * 60, sum_pages / time_all, failures))
 
     def parse_pdf(self, pdf_file: 'PdfFile') -> Dict:
+        """
+        Parses a single PDF file and returns its plaintext contents as well as an identifier
+        that is derived from the file name.
+        :param pdf_file: the PDF file
+        :return: a dict containing the file's ID and it's parsed plaintext content.
+                  if there are parsing errors, a failure message is logged unter key 'failure'.
+        """
         t0 = time()
         short_id = self.filename_to_arxiv_id(pdf_file.filename)
         if len(pdf_file.binary) == 0:
@@ -256,8 +309,9 @@ class PdfParser:
     @classmethod
     def pdf_extract_text(cls, pdf_file: 'PdfFile', maxpages=0) -> List[str]:
         """
-
-        :param pdf_file:
+        Extracts the plain text from the specified PDF file.
+        :param pdf_file: the PDF as PdfFile object
+        :param maxpages: parse no more than the first N pages (0 means parse all)
         :return: the pages of the pdf, one string per page
         """
         # TODO mabe pass return object & add break condition (requires adjustments in executor...)
@@ -281,6 +335,12 @@ class PdfParser:
 
     @classmethod
     def filename_to_arxiv_id(cls, filename):
+        """
+        Extracts the arxiv identifier from the file name of a PDF file inside one of the
+        official arxiv dumps
+        :param filename: the file name of the PDF
+        :return: the corresponding arxiv ID
+        """
         # need to fix broken IDs for documents extracted from the official tar archives
         short_id = os.path.basename(filename[:-4].replace('_', '/'))
         return text_processing.fix_file_based_id(short_id)
@@ -297,6 +357,10 @@ class PdfParser:
 
 
 class PdfFile:
+    """
+    a wrapper for a PDF file.
+    Consists of the file name and the binary contents of the file.
+    """
 
     def __init__(self, filename: str, binary: bytes):
         super().__init__()
@@ -305,6 +369,11 @@ class PdfFile:
 
     @staticmethod
     def from_file(file):
+        """
+        Creates a new PdfFile instance by reading the specified file.
+        :param file: the PDF file to read
+        :return: the corresponding PdfFile instance
+        """
         return PdfFile(filename=os.path.basename(file), binary=file_to_bytes(file))
 
     def __str__(self):
